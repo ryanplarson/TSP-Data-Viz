@@ -1,0 +1,156 @@
+---
+title: "GSS Guns"
+author: "Ryan Larson and Evan Stewart"
+date: "February 9, 2018"
+output: pdf_document
+editor_options: 
+  chunk_output_type: console
+urlcolor: blue
+---
+
+```{r library_data, message=FALSE}
+library(foreign)
+library(dplyr)
+library(ggplot2)
+library(ggthemes)
+library(srvyr)
+library(tidyr)
+options(survey.lonely.psu = "adjust") #center variance contribution around grand mean
+#options(survey.lonely.psu = "certainty") #make no contribution to variance
+
+gss <- read.dta(file="C:/Users/DELL/Documents/UMN/GSS_stata/GSS7216_R1a.dta",
+                convert.factors = F, missing.type = F)
+
+gss <- gss %>% filter(!is.na(vpsu) & !is.na(vstrat)) %>% 
+  mutate(weight=ifelse(year<2004, wtssall, wtssnr))
+  #https://gssdataexplorer.norc.org/pages/show?page=gss%2Fweighting
+  #2004 onward adjusted for nonresponse, WTSSNR used 2004+
+  #'72, '73, '74 unweighted, removed to have 1975-2016 weighted series
+```
+
+#gunlaw 
+
+Would you favor or oppose a law which would require a person to obtain a police permit before he or she could buy a gun?
+
+```{r gunlaw_plot, warning=FALSE}
+gss.design.gunlaw <- gss %>% 
+  select_("year","gunlaw","sample","weight", "vpsu", "vstrat") %>% 
+  mutate(sample=as.numeric(sample)) %>% 
+  filter(!(sample==4|sample==5|sample==7)) %>% #removing 1982 and 1987 black oversample
+  mutate(Favor=ifelse(gunlaw==1, ifelse(is.na(gunlaw),NA,1), 0),
+         Oppose=ifelse(gunlaw==2,ifelse(is.na(gunlaw),NA,1),0)) %>% 
+  as_survey_design(ids= vpsu, weights= weight, strata= vstrat, nest=T) %>%
+  filter(!is.na(gunlaw)) %>%
+  group_by(year) %>% 
+  summarize(Favor = survey_mean(Favor, vartype=c("se", "ci")),
+            Oppose = survey_mean(Oppose, vartype=c("se", "ci"))) %>%
+  gather(key=key, value=value, -year) %>%
+  separate(key, into=c("response","stat"), sep="_") %>%
+  mutate(stat=ifelse(is.na(stat), "mean", stat), value=value*100) %>%
+  spread(key=stat, value=value) %>%
+  mutate(response=factor(response, 
+                         levels=c("Favor","Oppose")))
+
+ggplot(gss.design.gunlaw)+  
+  geom_line(aes(x=year, y=mean, group=response), size=1)+
+  scale_colour_manual(labels=c("Favor","Oppose"),
+                      values=c("limegreen","dodgerblue"))+
+  geom_ribbon(aes(x=year, ymin=low, ymax=upp, fill=response), alpha=.5)+
+  scale_fill_manual(labels=c("Favor","Oppose"),
+                      values=c("limegreen","dodgerblue"))+
+  ggtitle("GSS gunlaw, 1975-2016", 
+          subtitle = "Favor or oppose gun permits before purchase?")+
+  labs( fill="Response")+
+  scale_x_continuous(limits=c(1975,2016), breaks=seq(1975,2016,3))+
+  xlab("Year")+ylab("Percent of Population (GSS)")+
+  theme_fivethirtyeight()         
+
+```
+
+\pagebreak
+
+The plot above mirrors our Valentine's plots. They show the design-corrected standard error of the mean estimate. I made the plot below instead with a loess fit, and I think its a bit easier on the eyes, but does not depict design corrected standard errors (rather, loess SE's for the loess fit through the survey weighted point estimates. 
+
+```{r}
+ggplot(gss.design.gunlaw)+  
+  geom_point(aes(x=year, y=mean,  color=response))+
+  geom_smooth(aes(x=year, y=mean, color=response, fill=response), method="loess", se=T, size=1)+
+  scale_color_manual(name="Response",labels=c("Favor","Oppose"),
+                      values=c("limegreen","dodgerblue"))+
+  scale_fill_manual(name="Response",labels=c("Favor","Oppose"),
+                                    values=c("limegreen","dodgerblue"))+
+  ggtitle("GSS 'gunlaw', 1975-2016", subtitle = "Favor or oppose gun permits before purchase?")+
+  labs( fill="Response")+
+  scale_x_continuous(limits=c(1975,2016), breaks=seq(1975,2016,5))+
+  scale_y_continuous(limits=c(15,85))+
+  xlab("Year")+ylab("Percent of Population (GSS)")+
+  theme_fivethirtyeight()  +
+  theme(legend.title=element_blank())
+
+
+```
+
+
+\pagebreak
+
+#owngun
+
+We should mention that even though ownership is declining, [sales are still high, indicating that sales are concentrated amongst those who already own.](https://www.washingtonpost.com/news/wonk/wp/2016/06/29/american-gun-ownership-is-now-at-a-30-year-low/?utm_term=.d0361c8ca5e1)
+
+
+```{r owngun_plot, warning=FALSE}
+gss.design.owngun <- gss %>% 
+  select_("year","owngun","sample","weight", "vpsu", "vstrat") %>% 
+  mutate(sample=as.numeric(sample)) %>% 
+  filter(!(sample==4|sample==5|sample==7)) %>% #removing 1982 and 1987 black oversample
+  mutate(Yes=ifelse(owngun==1, ifelse(is.na(owngun),NA,1), 0),
+         No=ifelse(owngun==2,ifelse(is.na(owngun),NA,1),0)) %>% 
+  as_survey_design(ids= vpsu, weights= weight, strata= vstrat, nest=T) %>%
+  filter(!is.na(owngun)) %>%
+  group_by(year) %>% 
+  summarize(Yes = survey_mean(Yes, vartype=c("se", "ci")),
+            No = survey_mean(No, vartype=c("se", "ci"))) %>%
+  gather(key=key, value=value, -year) %>%
+  separate(key, into=c("response","stat"), sep="_") %>%
+  mutate(stat=ifelse(is.na(stat), "mean", stat), value=value*100) %>%
+  spread(key=stat, value=value) %>%
+  mutate(response=factor(response, 
+                         levels=c("Yes","No")))
+
+ggplot(gss.design.owngun)+  
+  geom_line(aes(x=year, y=mean, group=response), size=1)+
+  scale_colour_manual(labels=c("Yes","No"),
+                      values=c("limegreen","dodgerblue"))+
+  geom_ribbon(aes(x=year, ymin=low, ymax=upp, fill=response), alpha=.5)+
+  scale_fill_manual(labels=c("Yes","No"),
+                      values=c("limegreen","dodgerblue"))+
+  ggtitle("GSS 'owngun', 1976-2016", 
+          subtitle = "Have a gun in home?")+
+  labs( fill="Response")+
+  scale_x_continuous(limits=c(1976,2016), breaks=seq(1976,2016,3))+
+  xlab("Year")+ylab("Percent of Population (GSS)")+
+  theme_fivethirtyeight()         
+
+```
+
+Again, a LOESS fit instead of a geom_line with design-corrected standard errors. 
+
+```{r}
+ggplot(gss.design.owngun)+  
+  geom_point(aes(x=year, y=mean,  color=response))+
+  geom_smooth(aes(x=year, y=mean, color=response, fill=response), method="loess", se=T, size=1)+
+  scale_color_manual(name="Response",labels=c("Yes","No"),
+                      values=c("limegreen","dodgerblue"))+
+  scale_fill_manual(name="Response",labels=c("Yes","No"),
+                                    values=c("limegreen","dodgerblue"))+
+  ggtitle("GSS 'owngun', 1975-2016", subtitle = "have a gun in home?")+
+  labs( fill="Response")+
+  scale_x_continuous(limits=c(1975,2016), breaks=seq(1975,2016,5))+
+  scale_y_continuous(limits=c(25,70))+
+  xlab("Year")+ylab("Percent of Population (GSS)")+
+  theme_fivethirtyeight()  +
+  theme(legend.title=element_blank())
+
+
+```
+

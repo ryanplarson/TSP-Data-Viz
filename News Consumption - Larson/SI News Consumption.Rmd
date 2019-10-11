@@ -1,0 +1,161 @@
+---
+title: "What's Trending? News Consumption"
+author: "Ryan Larson Evan Stewart, and Andrew Lindner"
+date: "April 9, 2018"
+output: pdf_document
+editor_options: 
+  chunk_output_type: console
+urlcolor: blue
+---
+
+```{r library_data, message=FALSE, warning=F, echo=F}
+library(foreign)
+library(dplyr)
+library(ggplot2)
+library(ggthemes)
+library(srvyr)
+library(tidyr)
+library(RColorBrewer)
+options(survey.lonely.psu = "adjust") #center variance contribution around grand mean
+#options(survey.lonely.psu = "certainty") #make no contribution to variance
+
+gss <- read.dta(file="C:/Users/DELL/Documents/UMN/GSS_stata/GSS7216_R1a.dta",
+                convert.factors = F, missing.type = F)
+
+gss <- gss %>% filter(!is.na(vpsu) & !is.na(vstrat)) %>% 
+  mutate(weight=ifelse(year<2004, wtssall, wtssnr))
+  #https://gssdataexplorer.norc.org/pages/show?page=gss%2Fweighting
+  #2004 onward adjusted for nonresponse, WTSSNR used 2004+
+  #'72, '73, '74 unweighted, removed to have 1975-2016 weighted series
+  
+
+  
+cces <- read.dta(file="C:/Users/DELL/Documents/UMN/TSP/cces_allyears_old.dta", convert.factors = F, missing.type = F) 
+```
+
+The recent controversy about [local news stations in the Sinclair Broadcasting Group](https://theconcourse.deadspin.com/how-americas-largest-local-tv-owner-turned-its-news-anc-1824233490) reading a coordinated, nationwide message against "fake news" raises questions about the state of news consumption in the United States. Where are Americans getting their news from? If more people are reading the news online, did the Sinclair have a large impact?  
+
+The General Social Survey asks respondents where they get *most* of their information about the news. This graph shows big changes in Americans' primary news source, including the rise of online news and the decline of television and newspapers. Notably, in the 2016 GSS, the Internet overtook TV as Americans' primary source of news for the first time. 
+
+```{r newsfrom_plot, warning=FALSE, echo=F}
+gss.design.newsfrom <- gss %>% 
+  select("year","newsfrom","sample","weight", "vpsu", "vstrat") %>% 
+  mutate(Newspapers=ifelse(newsfrom==1, ifelse(is.na(newsfrom),NA,1), 0),
+         Magazines=ifelse(newsfrom==2,ifelse(is.na(newsfrom),NA,1),0),
+         Internet=ifelse(newsfrom==3,ifelse(is.na(newsfrom),NA,1),0),
+         Other=ifelse(newsfrom==4|newsfrom==10|newsfrom==7|newsfrom==8|newsfrom==9,ifelse(is.na(newsfrom),NA,1),0),
+         TV=ifelse(newsfrom==5,ifelse(is.na(newsfrom),NA,1),0),
+         Radio=ifelse(newsfrom==6,ifelse(is.na(newsfrom),NA,1),0)) %>% 
+  as_survey_design(ids= vpsu, weights= weight, strata= vstrat, nest=T) %>%
+  filter(!is.na(newsfrom)) %>%
+  group_by(year) %>% 
+  summarize(Newspapers = survey_mean(Newspapers, vartype=c("se", "ci")),
+            Magazines = survey_mean(Magazines, vartype=c("se", "ci")),
+            Internet = survey_mean(Internet, vartype=c("se", "ci")),
+            Other = survey_mean(Other, vartype=c("se", "ci")),
+            TV = survey_mean(TV, vartype=c("se", "ci")),
+            Radio = survey_mean(Radio, vartype=c("se", "ci"))) %>%
+  gather(key=key, value=value, -year) %>%
+  separate(key, into=c("response","stat"), sep="_") %>%
+  mutate(stat=ifelse(is.na(stat), "mean", stat), value=value*100) %>%
+  spread(key=stat, value=value) %>%
+  mutate(response=factor(response, 
+                         levels=c("TV","Newspapers","Internet","Radio","Other","Magazines"),
+                         labels=c("TV","Newspapers","Internet","Radio","Other","Magazines")))
+
+ggplot(gss.design.newsfrom)+  
+  geom_point(aes(x=year, y=mean,  color=response))+
+  scale_color_brewer(type="qual", palette="Dark2")+
+  facet_wrap(~response)+
+  geom_smooth(aes(x=year, y=mean, color=response), method="loess", se=T, size=1)+
+  ggtitle("GSS 'newsfrom', 2006-2016", subtitle = "Where do you get most of your news?")+
+  scale_x_continuous(limits=c(2006,2016), breaks=seq(2006,2016,2))+
+  scale_y_continuous(limits=c(0, 50))+
+  xlab("Year")+ylab("Percent of Population (GSS)")+
+  theme_fivethirtyeight()+
+  theme(legend.position="none", panel.spacing = unit(1, "lines"))
+
+```
+
+Another survey, The Cooperative Congressional Election Survey, takes a different approach. They ask respondents to select whether they use newspapers, blogs, television, or other sources for their news information. When a survey doesn't ask respondents to pick a *primary* source, we see that use rates are more steady over time as people still use a variety of sources. 
+
+```{r cces_use_plot, warning=FALSE, echo=F}
+cces.design.use <- cces %>% 
+  select("year","blog","tv","newspap", "radio", "none","weight", "id") %>% 
+  mutate(Newspapers=ifelse(newspap==1, ifelse(is.na(newspap),NA,1), 0),
+         Blogs=ifelse(blog==1,ifelse(is.na(blog),NA,1),0),
+         TV=ifelse(tv==1,ifelse(is.na(tv),NA,1),0),
+         Radio=ifelse(radio==1,ifelse(is.na(radio),NA,1),0),
+         None=ifelse(none==1,ifelse(is.na(none),NA,1),0)) %>% 
+  as_survey_design(id=id,  weights= weight) %>%
+  filter(!is.na(Newspapers)) %>% #all have 33 missing
+  group_by(year) %>% 
+  summarize(Newspapers = survey_mean(Newspapers, vartype=c("se", "ci")),
+            Blogs = survey_mean(Blogs, vartype=c("se", "ci")),
+            TV = survey_mean(TV, vartype=c("se", "ci")),
+            Radio = survey_mean(Radio, vartype=c("se", "ci")),
+            None = survey_mean(None, vartype=c("se", "ci"))) %>%
+  gather(key=key, value=value, -year) %>%
+  separate(key, into=c("response","stat"), sep="_") %>%
+  mutate(stat=ifelse(is.na(stat), "mean", stat), value=value*100) %>%
+  spread(key=stat, value=value) %>%
+  mutate(response=factor(response, 
+                         levels=c("TV","Newspapers","Radio","Blogs","None"),
+                         labels=c("TV","Newspapers","Radio","Blogs","None")))
+
+ggplot(cces.design.use)+  
+  geom_point(aes(x=year, y=mean,  color=response))+
+  scale_color_brewer(type="qual", palette="Dark2")+
+  facet_wrap(~response)+
+  geom_smooth(aes(x=year, y=mean, color=response), method="loess", se=T, size=1)+
+  ggtitle("CCES Media Use, 2008-2016", subtitle = "What news sources do you use?")+
+  labs( fill="Response")+
+  scale_x_continuous(limits=c(2008,2016), breaks=seq(2008,2016,2))+
+  scale_y_continuous(limits=c(0, 100))+
+  xlab("Year")+ylab("Percent of Population")+
+  theme_fivethirtyeight()+
+  theme(legend.position="none", panel.spacing = unit(1, "lines"))
+
+```
+
+Reported rates of news watching have also stayed pretty stable over the last eight years, with about three-quarters of Americans getting some of their news from TV. Since local news is still a steady part of our news diet, the Sinclair broadcast had a much broader potential reach than we would typically assume about news today.   
+
+```{r cces_wr_plot, warning=FALSE, echo=F}
+cces.wr.design <- cces %>% 
+  select("year","watch","read","weight", "id") %>% 
+  mutate(Watch.Local=ifelse(watch==1,1,0),
+         Watch.National=ifelse(watch==2,1,0),
+         Watch.Both=ifelse(watch==3,1,0),
+         Read.Print=ifelse(read==1,1,0),
+         Read.Online=ifelse(read==2,1,0),
+         Read.Both=ifelse(read==3,1,0)) %>%
+  as_survey_design(id=id,  weights= weight) %>%
+  filter(!is.na(watch) & !is.na(read)) %>%
+  group_by(year) %>% 
+  summarize(WatchxLocal= survey_mean(Watch.Local, vartype=c("se", "ci")),
+            WatchxNational = survey_mean(Watch.National, vartype=c("se", "ci")),
+            WatchxBoth = survey_mean(Watch.Both, vartype=c("se", "ci")),
+            ReadxPrint = survey_mean(Read.Print, vartype=c("se", "ci")),
+            ReadxOnline = survey_mean(Read.Online, vartype=c("se", "ci")),
+            ReadxBoth = survey_mean(Read.Both, vartype=c("se", "ci"))) %>%
+  gather(key=key, value=value, -year) %>%
+  separate(key, into=c("response","stat"), sep="_") %>%
+  mutate(stat=ifelse(is.na(stat), "mean", stat), value=value*100) %>%
+  spread(key=stat, value=value) %>%
+  separate(response, into=c("var","resp"), sep = "x") %>% 
+  mutate(variable=factor(var, 
+                         levels=c("Read","Watch"),
+                         labels=c("Read","Watch")))
+
+cces.watch <- cces.wr.design %>% filter(var=="Watch")
+
+ggplot(cces.watch)+  
+  geom_area(aes(x=year, y=mean,  fill=resp))+
+  ggtitle("CCES Watch, 2008-2016", subtitle = "Where do you watch the news?")+ 
+  scale_x_continuous(limits=c(2008,2016), breaks=seq(2008,2016,1))+
+  xlab("Year")+ylab("Percent of Population")+
+  labs(fill="")+ 
+  theme_fivethirtyeight()+
+  scale_fill_brewer(palette="Dark2")
+
+```

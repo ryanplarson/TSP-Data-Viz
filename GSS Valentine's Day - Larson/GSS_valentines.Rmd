@@ -1,0 +1,345 @@
+---
+title: "GSS Valentine's"
+author: "Evan Stewart and Ryan Larson"
+date: "February 9, 2018"
+output: pdf_document
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r library_data, message=FALSE}
+library(foreign)
+library(dplyr)
+library(ggplot2)
+library(ggthemes)
+library(srvyr)
+library(tidyr)
+options(survey.lonely.psu = "adjust") #center variance contribution around grand mean
+#options(survey.lonely.psu = "certainty") #make no contribution to variance
+
+gss <- read.dta(file="C:/Users/DELL/Documents/UMN/GSS_stata/GSS7216_R1a.dta",
+                convert.factors = F, missing.type = F)
+
+gss <- gss %>% filter(!is.na(vpsu) & !is.na(vstrat)) %>% 
+  mutate(weight=ifelse(year<2004, wtssall, wtssnr))
+  #https://gssdataexplorer.norc.org/pages/show?page=gss%2Fweighting
+  #2004 onward adjusted for nonresponse, WTSSNR used 2004+
+  #'72, '73, '74 unweighted, removed to have 1975-2016 weighted series
+```
+
+#premarsx 
+
+There's been a lot of discussion about the way morals and attitudes about sex are changing in this country. If a man and woman have sex relations before marriage, do you think it is always wrong, almost always wrong, wrong only 
+sometimes, or not wrong at all?
+
+```{r premarsx_plot, warning=FALSE}
+gss.design.premarsx <- gss %>% 
+  select_("year","premarsx","sample","weight", "vpsu", "vstrat") %>% 
+  mutate(sample=as.numeric(sample)) %>% 
+  filter(!(sample==4|sample==5|sample==7)) %>% #removing 1982 and 1987 black oversample
+  mutate(always_wrong=ifelse(premarsx==1,1,0), 
+         almost_always_wrong=ifelse(premarsx==2,1,0),
+         sometimes_wrong=ifelse(premarsx==3,1,0),
+         not_wrong_at_all=ifelse(premarsx==4,1,0)) %>%
+  as_survey_design(ids= vpsu, weights= weight, strata= vstrat, nest=T) %>%
+  filter(!is.na(premarsx)) %>%
+  group_by(year) %>% 
+  summarize(always.wrong = survey_mean(always_wrong, vartype=c("se", "ci")),
+            almost.always.wrong = survey_mean(almost_always_wrong, vartype=c("se", "ci")),
+            sometimes.wrong = survey_mean(sometimes_wrong, vartype=c("se", "ci")),
+            not.wrong.at.all = survey_mean(not_wrong_at_all, vartype=c("se", "ci"))) %>%
+  gather(key=key, value=value, -year) %>%
+  separate(key, into=c("response","stat"), sep="_") %>%
+  mutate(stat=ifelse(is.na(stat), "mean", stat), value=value*100) %>%
+  spread(key=stat, value=value) %>%
+  mutate(response=factor(response, 
+                         levels=c("always.wrong","almost.always.wrong",
+                                  "sometimes.wrong","not.wrong.at.all")))
+
+ggplot(gss.design.premarsx)+  
+  geom_line(aes(x=year, y=mean, group=response), size=1)+
+  geom_ribbon(aes(x=year, ymin=low, ymax=upp, fill=response), alpha=.5)+
+  scale_fill_manual(labels=c("Always wrong","Almost always wrong",
+                             "Sometimes wrong","Not wrong at all"),
+                      values=c("mediumorchid","darkmagenta", "deeppink","hotpink"))+
+  ggtitle("GSS Premartial Sex, 1975-2016", subtitle = "Sexual Relations before Marriage?")+
+  labs( fill="Response")+
+  scale_x_continuous(limits=c(1975,2016), breaks=seq(1975,2016,5))+
+  xlab("Year")+ylab("Percent of Population (GSS)")+
+  theme_fivethirtyeight()          
+
+```
+
+```{r, eval=FALSE, include=FALSE}
+ggplot(gss.design.premarsx)+  
+  geom_point(aes(x=year, y=mean,  color=response))+
+  geom_smooth(aes(x=year, y=mean, color=response, fill=response), size=1)+
+  scale_color_manual(name="Response",labels=c("Always wrong","Almost always wrong",
+                             "Sometimes wrong","Not wrong at all"),
+                      values=c("mediumorchid","darkmagenta", "deeppink","hotpink"))+
+  scale_fill_manual(name="Response",labels=c("Always wrong","Almost always wrong",
+                                              "Sometimes wrong","Not wrong at all"),
+                                    values=c("mediumorchid","darkmagenta", "deeppink","hotpink"))+
+  ggtitle("GSS Premartial Sex, 1975-2016", subtitle = "Sexual Relations before Marriage?")+
+  labs( fill="Response")+
+  scale_x_continuous(limits=c(1975,2016), breaks=seq(1975,2016,5))+
+  xlab("Year")+ylab("Percent of Population (GSS)")+
+  theme_fivethirtyeight()  +
+  theme(legend.title=element_blank())
+
+
+```
+
+#xmarsex 
+
+What is your opinion about a married person having sexual relations with someone other than the marriage partner--is it always wrong, almost always wrong, wrong only sometimes, or not wrong at all?
+
+```{r xmarsex_plot, warning=FALSE}
+gss.design.xmarsex <- gss %>% 
+  select_("year","xmarsex","sample","weight", "vpsu", "vstrat") %>% 
+  mutate(sample=as.numeric(sample)) %>% 
+  filter(!(sample==4|sample==5|sample==7)) %>% #removing 1982 and 1987 black oversample
+  mutate(always_wrong=ifelse(xmarsex==1,1,0), 
+         almost_always_wrong=ifelse(xmarsex==2,1,0),
+         sometimes_wrong=ifelse(xmarsex==3,1,0),
+         not_wrong_at_all=ifelse(xmarsex==4,1,0)) %>%
+  as_survey_design(ids= vpsu, weights= weight, strata= vstrat, nest=T) %>%
+  filter(!is.na(xmarsex)) %>%
+  group_by(year) %>% 
+  summarize(always.wrong = survey_mean(always_wrong, vartype=c("se", "ci")),
+            almost.always.wrong = survey_mean(almost_always_wrong, vartype=c("se", "ci")),
+            sometimes.wrong = survey_mean(sometimes_wrong, vartype=c("se", "ci")),
+            not.wrong.at.all = survey_mean(not_wrong_at_all, vartype=c("se", "ci"))) %>%
+  gather(key=key, value=value, -year) %>%
+  separate(key, into=c("response","stat"), sep="_") %>%
+  mutate(stat=ifelse(is.na(stat), "mean", stat), value=value*100) %>%
+  spread(key=stat, value=value) %>%
+  mutate(response=factor(response, 
+                         levels=c("always.wrong","almost.always.wrong",
+                                  "sometimes.wrong","not.wrong.at.all")))
+
+ggplot(gss.design.xmarsex)+  
+  geom_line(aes(x=year, y=mean, group=response), size=1)+
+  geom_ribbon(aes(x=year, ymin=low, ymax=upp, fill=response), alpha=.5)+
+  scale_fill_manual(labels=c("Always wrong","Almost always wrong",
+                             "Sometimes wrong","Not wrong at all"),
+                      values=c("mediumorchid","darkmagenta", "deeppink","hotpink"))+
+  ggtitle("GSS Extramarital Sex, 1976-2016", 
+          subtitle = "Sexual relations with someone other than marriage partner?")+
+  labs( fill="Response")+
+  scale_x_continuous(limits=c(1975,2016), breaks=seq(1976,2016,5))+
+  xlab("Year")+ylab("Percent of Population (GSS)")+
+  theme_fivethirtyeight()          
+
+```
+
+
+# evstray
+
+Have you ever had sex with someone other than your husband or wife while you were married?
+
+```{r evstray_plot, warning=FALSE}
+gss.design.evstray <- gss %>% 
+  select_("year","evstray","sample","weight", "vpsu", "vstrat") %>% 
+  mutate(sample=as.numeric(sample)) %>% 
+  filter(!(sample==4|sample==5|sample==7)) %>% #removing 1982 and 1987 black oversample
+  mutate(Yes=ifelse(evstray==1, 1, 0),
+         No=ifelse(evstray==2,1,0),
+         evstray=ifelse(evstray==1|evstray==2, evstray, NA)) %>%
+  as_survey_design(ids= vpsu, weights= weight, strata= vstrat, nest=T) %>%
+  filter(!is.na(evstray)) %>%
+  group_by(year) %>% 
+  summarize(Yes = survey_mean(Yes, vartype=c("se", "ci")),
+            No = survey_mean(No, vartype=c("se", "ci"))) %>%
+  gather(key=key, value=value, -year) %>%
+  separate(key, into=c("response","stat"), sep="_") %>%
+  mutate(stat=ifelse(is.na(stat), "mean", stat), value=value*100) %>%
+  spread(key=stat, value=value) %>%
+  mutate(response=factor(response, 
+                         levels=c("Yes","No")))
+
+ggplot(gss.design.evstray)+  
+  geom_line(aes(x=year, y=mean, group=response), size=1)+
+  scale_colour_manual(labels=c("Yes","No"),
+                      values=c("darkmagenta","hotpink"))+
+  geom_ribbon(aes(x=year, ymin=low, ymax=upp, fill=response), alpha=.5)+
+  scale_fill_manual(labels=c("Yes","No"),
+                      values=c("darkmagenta","hotpink"))+
+  ggtitle("GSS Ever Stray, 1991-2016", 
+          subtitle = "Sex with someone other than husband or wife while married?")+
+  labs( fill="Response")+
+  scale_x_continuous(limits=c(1991,2016), breaks=seq(1991,2016,3))+
+  xlab("Year")+ylab("Percent of Population (GSS)")+
+  theme_fivethirtyeight()          
+
+```
+
+
+#sexual partners since 18 amongst those aged 20-24 by cohort - Twenge et al. 2017
+
+Numwomen Nummen: Now thinking about the time since your 18th birthday (including the past 12 months) how many female/male partners have you had sex with? 
+
+I used Twenge et al.'s (2017) coding strategy . Coded as 1 if any partners, 0 if sexually inactive.  Took all individuals in GSS aged 20-24 and grouped by birth decade. Twenge only used survey years 1989-2014. I use 1985-2016. 
+
+```{r twenge_plot, warning=FALSE}
+gss.design.twenge <- gss %>% 
+  select_("year","nummen","numwomen","age","cohort","sample","weight", "vpsu", "vstrat") %>% 
+  mutate(sample=as.numeric(sample)) %>% 
+  filter(!(sample==4|sample==5|sample==7), #removing 1982 and 1987 black oversample
+         age>19 & age <25, #filtering just 20-24 year olds at time of survey
+         cohort>1964) %>%  #filtering out older birth cohorts
+  mutate(Inactive=ifelse(numwomen==0 & nummen==0, 1,0),
+         Active=ifelse(numwomen>0 | nummen>0, 1,0),
+         cohortcat=ifelse(cohort<1970, "1960's", 
+                       ifelse(cohort>=1970 & cohort<1980, "1970's",
+                             ifelse(cohort>=1980 & cohort<1990, "1980's", "1990's")))) %>%
+  filter(!is.na(nummen)&!is.na(numwomen)) %>%
+  as_survey_design(ids= vpsu, weights= weight, strata= vstrat, nest=T) %>%
+  group_by(cohortcat) %>% 
+  summarize(Inactive = survey_mean(Inactive, vartype=c("se", "ci")),
+            Active = survey_mean(Active, vartype=c("se", "ci"))) %>%
+  gather(key=key, value=value, -cohortcat) %>%
+  separate(key, into=c("response","stat"), sep="_") %>%
+  mutate(stat=ifelse(is.na(stat), "mean", stat), value=value*100) %>%
+  spread(key=stat, value=value) %>%
+  mutate(response=factor(response, 
+                         levels=c("Inactive","Active")))
+
+ggplot(gss.design.twenge)+  
+  geom_bar(aes(y = mean, x=cohortcat, fill=response), stat="identity")+
+  scale_fill_manual(labels=c("Inactive","Active"),
+                      values=c("hotpink","mediumorchid"))+
+  ggtitle("GSS Sexual Inactivity: 20-24 year olds by cohort", 
+  subtitle = "Since your 18th birthday have you had a sexual partner? ")+
+  labs( fill="Response")+
+  xlab("Cohort")+ylab("Percent of Population (GSS)")+
+  theme_fivethirtyeight()+
+  geom_text(aes(x = cohortcat, y = 100-(.5*mean),
+                                  label = paste0(round(mean,1),"%")), size=3)
+```
+
+
+#divlaw
+
+Should divorce in this country be easier or more difficult to obtain than it is now?
+
+```{r divlaw_plot, warning=FALSE}
+gss.design.divlaw <- gss %>% 
+  select_("year","divlaw","sample","weight", "vpsu", "vstrat") %>% 
+  mutate(sample=as.numeric(sample)) %>% 
+  filter(!(sample==4|sample==5|sample==7)) %>% #removing 1982 and 1987 black oversample
+  mutate(easier=ifelse(divlaw==1,1,0), 
+         more_difficult=ifelse(divlaw==2,1,0),
+         stay_same=ifelse(divlaw==3,1,0)) %>%
+  as_survey_design(ids= vpsu, weights= weight, strata= vstrat, nest=T) %>%
+  filter(!is.na(divlaw)) %>%
+  group_by(year) %>% 
+  summarize(easier = survey_mean(easier, vartype=c("se", "ci")),
+            more.difficult = survey_mean(more_difficult, vartype=c("se", "ci")),
+            stay.same = survey_mean(stay_same, vartype=c("se", "ci"))) %>%
+  gather(key=key, value=value, -year) %>%
+  separate(key, into=c("response","stat"), sep="_") %>%
+  mutate(stat=ifelse(is.na(stat), "mean", stat), value=value*100) %>%
+  spread(key=stat, value=value) %>%
+  mutate(response=factor(response, 
+                         levels=c("easier","more.difficult",
+                                  "stay.same")))
+
+ggplot(gss.design.divlaw)+  
+  geom_line(aes(x=year, y=mean, group=response), size=1)+
+  geom_ribbon(aes(x=year, ymin=low, ymax=upp, fill=response), alpha=.5)+
+  scale_fill_manual(labels=c("Easier","More difficult",
+                             "Stay Same"),
+                      values=c("darkmagenta", "deeppink","hotpink"))+
+  ggtitle("GSS Divorce Law, 1975-2016", 
+  subtitle = "Should divorce in this country be easier or more difficult to obtain than it is now?")+
+  labs( fill="Response")+
+  scale_x_continuous(limits=c(1975,2016), breaks=seq(1975,2016,5))+
+  xlab("Year")+ylab("Percent of Population (GSS)")+
+  theme_fivethirtyeight()          
+
+```
+
+
+#divorce
+
+Are you currently--married, widowed, divorced, separated, or have you never been married? 
+B. IF CURRENTLY MARRIED OR WIDOWED: Have you ever been divorced or legally separated?
+
+```{r divorce_plot, warning=FALSE}
+gss.design.divorce <- gss %>% 
+  select_("year","divorce","sample","weight", "vpsu", "vstrat") %>% 
+  mutate(sample=as.numeric(sample)) %>% 
+  filter(!(sample==4|sample==5|sample==7)) %>% #removing 1982 and 1987 black oversample
+  mutate(Yes=ifelse(divorce==1, 1, 0),
+         No=ifelse(divorce==2,1,0)) %>%
+  filter(!is.na(divorce)) %>%
+  as_survey_design(ids= vpsu, weights= weight, strata= vstrat, nest=T) %>%
+  group_by(year) %>% 
+  summarize(Yes = survey_mean(Yes, vartype=c("se", "ci")),
+            No = survey_mean(No, vartype=c("se", "ci"))) %>%
+  gather(key=key, value=value, -year) %>%
+  separate(key, into=c("response","stat"), sep="_") %>%
+  mutate(stat=ifelse(is.na(stat), "mean", stat), value=value*100) %>%
+  spread(key=stat, value=value) %>%
+  mutate(response=factor(response, 
+                         levels=c("Yes","No")))
+
+ggplot(gss.design.divorce)+  
+  geom_line(aes(x=year, y=mean, group=response), size=1)+
+  scale_colour_manual(labels=c("Yes","No"),
+                      values=c("darkmagenta","hotpink"))+
+  geom_ribbon(aes(x=year, ymin=low, ymax=upp, fill=response), alpha=.5)+
+  scale_fill_manual(labels=c("Yes","No"),
+                      values=c("darkmagenta","hotpink"))+
+  ggtitle("GSS Divorce, 1975-2016", 
+          subtitle = "Have you ever been divorced or legally separated?")+
+  labs( fill="Response")+
+  scale_x_continuous(limits=c(1975,2016), breaks=seq(1975,2016,5))+
+  xlab("Year")+ylab("Percent of Population (GSS)")+
+  theme_fivethirtyeight()          
+
+```
+
+
+
+
+```{r sexfreq_plot, warning=FALSE, include=F, eval=F}
+gss.design.sexfreq <- gss %>% 
+  select_("year","sexfreq","sample","weight", "vpsu", "vstrat") %>% 
+  mutate(sample=as.numeric(sample)) %>% 
+  filter(!(sample==4|sample==5|sample==7)) %>% #removing 1982 and 1987 black oversample
+  mutate(not_at_all=ifelse(sexfreq==0,1,0), 
+         two_three_times_a_month_or_less=ifelse(sexfreq==1|sexfreq==2|sexfreq==3,1,0),
+         weekly=ifelse(sexfreq==4,1,0),
+         multiple_per_week=ifelse(sexfreq==5|sexfreq==6,1,0)) %>%
+  filter(!is.na(sexfreq)) %>%
+  as_survey_design(ids= vpsu, weights= weight, strata= vstrat, nest=T) %>%
+  group_by(year) %>% 
+  summarize(not.at.all = survey_mean(not_at_all, vartype=c("se", "ci")),
+            two.three.time.a.month.or.less = survey_mean(two_three_times_a_month_or_less, 
+                                                         vartype=c("se", "ci")),
+            weekly = survey_mean(weekly, vartype=c("se", "ci")),
+            multiple.per.week = survey_mean(multiple_per_week, vartype=c("se", "ci"))) %>%
+  gather(key=key, value=value, -year) %>%
+  separate(key, into=c("response","stat"), sep="_") %>%
+  mutate(stat=ifelse(is.na(stat), "mean", stat), value=value*100) %>%
+  spread(key=stat, value=value) %>%
+  mutate(response=factor(response, 
+                         levels=c("not.at.all","two.three.time.a.month.or.less",
+                                  "weekly","multiple.per.week")))
+
+ggplot(gss.design.sexfreq)+  
+  geom_line(aes(x=year, y=mean, group=response), size=1)+
+  geom_ribbon(aes(x=year, ymin=low, ymax=upp, fill=response), alpha=.5)+
+  scale_fill_manual(labels=c("Not at all","2-3 times/month or less",
+                               "Weekly","Multiple/week"),
+                      values=c("darkmagenta", "deeppink","violet","hotpink"))+
+  ggtitle("GSS Sex Frequency, 1975-2016", 
+          subtitle = "About how often did you have sex during the last 12 months?")+
+  labs( fill="Response")+
+  scale_x_continuous(limits=c(1989,2016), breaks=seq(1989,2016,3))+
+  xlab("Year")+ylab("Percent of Population (GSS)")+
+  theme_fivethirtyeight()          
+
+```
