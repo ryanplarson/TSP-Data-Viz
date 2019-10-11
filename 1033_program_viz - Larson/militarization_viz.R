@@ -40,7 +40,7 @@ dod <- bind_rows(data, .id = "sheet")
 
 dod.year <- dod %>% mutate(year = as.numeric(format(`Ship Date`, "%Y"))) %>%
   mutate(value = `Acquisition Value`*Quantity) %>%
-  group_by(year) %>% summarize(value = mean(value, na.rm = T)) %>%
+  group_by(year) %>% summarize(value = sum(value, na.rm = T)) %>%
   filter(year >= 1990 & year <= 2018) 
 
 ggplot(dod.year, aes(x=year, y=value, group=1))+
