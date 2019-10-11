@@ -52,3 +52,7 @@ ggplot(dod.year, aes(x=year, y=value, group=1))+
        subtitle = "Source: Defense Logistics Agency", 
        caption = "Ryan Larson, TSP")
 
+ggsave(filename = "C:/Users/DELL/Documents/UMN/TSP/TSP-Data-Viz/1033_program_viz - Larson/1033_viz.png",
+       device = "png")
+
+
